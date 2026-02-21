@@ -12,6 +12,8 @@ import GeneralExpenseForm from './components/GeneralExpenseForm';
 import { getSmartSuggestions, autoCategorize } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 import { Auth } from './components/Auth';
+import { ApiKeyChecker } from './components/ApiKeyChecker';
+import { getStoredApiKey } from './services/geminiService';
 
 const TRANSLATIONS = {
   en: {
@@ -121,11 +123,12 @@ const DEFAULT_CATEGORIES: Category[] = [
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
+  const [hasApiKey, setHasApiKey] = useState<boolean>(!!getStoredApiKey());
   const [items, setItems] = useState<GroceryItem[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [budgets, setBudgets] = useState<Budget[]>([]);
-  
+
   const [currentView, setCurrentView] = useState<AppView>('expenses');
   const [lang, setLang] = useState<Language>('en');
   const [showProfile, setShowProfile] = useState(false);
@@ -137,7 +140,7 @@ const App: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
-  const [showNotification, setShowNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const [showNotification, setShowNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [pricePromptItem, setPricePromptItem] = useState<GroceryItem | null>(null);
 
   const t = TRANSLATIONS[lang];
@@ -186,8 +189,8 @@ const App: React.FC = () => {
     if (!nameInput.trim() || !session) return;
     const estPrice = parseFloat(priceInput) || null;
     if (editingId) {
-      const { error } = await supabase.from('grocery_items').update({ 
-        name: nameInput.trim(), note: noteInput.trim(), estimated_price: estPrice 
+      const { error } = await supabase.from('grocery_items').update({
+        name: nameInput.trim(), note: noteInput.trim(), estimated_price: estPrice
       }).eq('id', editingId);
       if (!error) { setEditingId(null); triggerNotification('Item updated'); }
     } else {
@@ -210,8 +213,8 @@ const App: React.FC = () => {
       name: pricePromptItem.name, amount: actualPrice, date: purchaseDate, category_id: 'groceries-default',
       note: pricePromptItem.note, linked_grocery_id: pricePromptItem.id, user_id: session.user.id
     }]);
-    await supabase.from('grocery_items').update({ 
-      is_purchased: true, actual_price: actualPrice, purchased_at: purchaseDate 
+    await supabase.from('grocery_items').update({
+      is_purchased: true, actual_price: actualPrice, purchased_at: purchaseDate
     }).eq('id', pricePromptItem.id);
     setPricePromptItem(null);
     triggerNotification(`Logged $${actualPrice.toFixed(2)} in Groceries`);
@@ -236,6 +239,7 @@ const App: React.FC = () => {
   };
 
   if (!session) return <Auth />;
+  if (!hasApiKey) return <ApiKeyChecker onKeyReady={() => setHasApiKey(true)} />;
 
   const activeItems = items.filter(i => !i.is_purchased);
 
@@ -248,53 +252,53 @@ const App: React.FC = () => {
             <h1 className="text-xl font-black text-gray-800 tracking-tight hidden sm:block">SpendFlow</h1>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
-             {/* Desktop Navigation */}
-             <div className="hidden md:flex bg-gray-100 p-1 rounded-xl">
-                {[
-                  { id: 'expenses', icon: <ReceiptIcon />, label: t.spend },
-                  { id: 'list', icon: <ListIcon />, label: t.list },
-                  { id: 'reports', icon: <ChartIcon />, label: t.stats },
-                  { id: 'settings', icon: <SettingsIcon />, label: t.setup }
-                ].map(v => (
-                  <button 
-                    key={v.id}
-                    onClick={() => setCurrentView(v.id as AppView)}
-                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 text-xs font-bold ${currentView === v.id ? 'bg-white shadow-sm text-emerald-600' : 'text-gray-400'}`}
-                  >
-                    {v.icon} <span>{v.label}</span>
-                  </button>
-                ))}
-             </div>
-             
-             <div className="h-6 w-[1px] bg-gray-100 hidden md:block" />
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex bg-gray-100 p-1 rounded-xl">
+              {[
+                { id: 'expenses', icon: <ReceiptIcon />, label: t.spend },
+                { id: 'list', icon: <ListIcon />, label: t.list },
+                { id: 'reports', icon: <ChartIcon />, label: t.stats },
+                { id: 'settings', icon: <SettingsIcon />, label: t.setup }
+              ].map(v => (
+                <button
+                  key={v.id}
+                  onClick={() => setCurrentView(v.id as AppView)}
+                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 text-xs font-bold ${currentView === v.id ? 'bg-white shadow-sm text-emerald-600' : 'text-gray-400'}`}
+                >
+                  {v.icon} <span>{v.label}</span>
+                </button>
+              ))}
+            </div>
 
-             {/* Language Toggle */}
-             <button 
-               onClick={() => setLang(lang === 'en' ? 'mm' : 'en')}
-               className="flex items-center gap-1 p-2 bg-gray-50 rounded-xl hover:bg-emerald-50 text-gray-500 hover:text-emerald-600 transition-all border border-transparent hover:border-emerald-100"
-               title="Change Language"
-             >
-               <GlobeIcon />
-               <span className="text-[10px] font-black uppercase tracking-tighter">{lang === 'en' ? 'EN' : 'MM'}</span>
-             </button>
+            <div className="h-6 w-[1px] bg-gray-100 hidden md:block" />
 
-             {/* Profile Management */}
-             <button 
-               onClick={() => setShowProfile(!showProfile)}
-               className={`p-2 rounded-xl transition-all ${showProfile ? 'bg-emerald-500 text-white shadow-lg' : 'bg-gray-50 text-gray-500 hover:bg-emerald-50'}`}
-               title={t.profile}
-             >
-               <UserIcon />
-             </button>
+            {/* Language Toggle */}
+            <button
+              onClick={() => setLang(lang === 'en' ? 'mm' : 'en')}
+              className="flex items-center gap-1 p-2 bg-gray-50 rounded-xl hover:bg-emerald-50 text-gray-500 hover:text-emerald-600 transition-all border border-transparent hover:border-emerald-100"
+              title="Change Language"
+            >
+              <GlobeIcon />
+              <span className="text-[10px] font-black uppercase tracking-tighter">{lang === 'en' ? 'EN' : 'MM'}</span>
+            </button>
 
-             {/* App Info */}
-             <button 
-               onClick={() => setShowInfo(true)}
-               className="p-2 bg-gray-50 text-gray-500 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all"
-               title={t.appInfo}
-             >
-               <InfoIcon />
-             </button>
+            {/* Profile Management */}
+            <button
+              onClick={() => setShowProfile(!showProfile)}
+              className={`p-2 rounded-xl transition-all ${showProfile ? 'bg-emerald-500 text-white shadow-lg' : 'bg-gray-50 text-gray-500 hover:bg-emerald-50'}`}
+              title={t.profile}
+            >
+              <UserIcon />
+            </button>
+
+            {/* App Info */}
+            <button
+              onClick={() => setShowInfo(true)}
+              className="p-2 bg-gray-50 text-gray-500 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all"
+              title={t.appInfo}
+            >
+              <InfoIcon />
+            </button>
           </div>
         </div>
       </nav>
@@ -310,14 +314,14 @@ const App: React.FC = () => {
               <p className="text-sm font-bold text-gray-700 truncate">{session.user.email}</p>
             </div>
             <div className="space-y-3">
-              <button 
+              <button
                 onClick={() => supabase.auth.signOut()}
                 className="w-full py-4 bg-rose-50 text-rose-600 font-bold rounded-2xl hover:bg-rose-100 transition-colors flex items-center justify-center gap-2"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                 {t.logout}
               </button>
-              <button 
+              <button
                 onClick={() => setShowProfile(false)}
                 className="w-full py-4 text-gray-400 font-bold hover:text-gray-600 transition-colors"
               >
@@ -334,36 +338,36 @@ const App: React.FC = () => {
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowInfo(false)} />
           <div className="relative w-full max-w-lg bg-white rounded-[2.5rem] p-10 shadow-2xl animate-slide-up my-auto max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-4 mb-6">
-               <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-white font-black text-3xl shadow-lg shadow-emerald-200">S</div>
-               <div>
-                  <h3 className="text-2xl font-black text-gray-800">{t.aboutTitle}</h3>
-                  <p className="text-sm font-bold text-emerald-600">v1.0.0</p>
-               </div>
+              <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-white font-black text-3xl shadow-lg shadow-emerald-200">S</div>
+              <div>
+                <h3 className="text-2xl font-black text-gray-800">{t.aboutTitle}</h3>
+                <p className="text-sm font-bold text-emerald-600">v1.0.0</p>
+              </div>
             </div>
             <p className="text-gray-500 font-medium leading-relaxed mb-8">
               {t.aboutDesc}
             </p>
-            
+
             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 ml-1">{t.keyFeatures}</h4>
             <div className="grid grid-cols-1 gap-3 mb-10">
-               {t.features.map((f: string, idx: number) => (
-                 <div key={idx} className="flex gap-3 items-start bg-gray-50 p-3 rounded-xl">
-                    <div className="w-5 h-5 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                       <PlusIcon />
-                    </div>
-                    <span className="text-sm font-semibold text-gray-700 leading-tight">{f}</span>
-                 </div>
-               ))}
+              {t.features.map((f: string, idx: number) => (
+                <div key={idx} className="flex gap-3 items-start bg-gray-50 p-3 rounded-xl">
+                  <div className="w-5 h-5 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <PlusIcon />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700 leading-tight">{f}</span>
+                </div>
+              ))}
             </div>
 
             <div className="text-center">
-               <p className="text-xs font-black text-gray-400 uppercase tracking-widest">{t.poweredBy}</p>
-               <button 
+              <p className="text-xs font-black text-gray-400 uppercase tracking-widest">{t.poweredBy}</p>
+              <button
                 onClick={() => setShowInfo(false)}
                 className="mt-6 w-full py-4 bg-gray-800 text-white font-bold rounded-2xl hover:bg-black transition-all"
-               >
-                 Got it
-               </button>
+              >
+                Got it
+              </button>
             </div>
           </div>
         </div>
@@ -404,12 +408,12 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <button type="submit" disabled={!nameInput.trim()} className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl shadow-lg shadow-emerald-100 disabled:opacity-50">
-                   {editingId ? 'Save Changes' : 'Add to Shopping List'}
+                  {editingId ? 'Save Changes' : 'Add to Shopping List'}
                 </button>
               </form>
             </section>
-            
-            <button 
+
+            <button
               onClick={() => {
                 if (items.length === 0) return triggerNotification('Add items for AI suggestions', 'error');
                 setIsSuggesting(true);
@@ -423,18 +427,18 @@ const App: React.FC = () => {
             <SmartSuggestionsPanel suggestions={suggestions} onAdd={addFromSuggestion} isLoading={isSuggesting} />
             <div className="space-y-1">
               {activeItems.map(item => (
-                <GroceryItemCard 
-                  key={item.id} 
-                  item={item} 
-                  onToggle={() => setPricePromptItem(item)} 
-                  onDelete={async (id) => await supabase.from('grocery_items').delete().eq('id', id)} 
-                  onEdit={i => { setEditingId(i.id); setNameInput(i.name); setNoteInput(i.note || ''); setPriceInput(i.estimated_price?.toString() || ''); }} 
+                <GroceryItemCard
+                  key={item.id}
+                  item={item}
+                  onToggle={() => setPricePromptItem(item)}
+                  onDelete={async (id) => await supabase.from('grocery_items').delete().eq('id', id)}
+                  onEdit={i => { setEditingId(i.id); setNameInput(i.name); setNoteInput(i.note || ''); setPriceInput(i.estimated_price?.toString() || ''); }}
                 />
               ))}
               {activeItems.length === 0 && (
                 <div className="py-20 text-center bg-white rounded-[2rem] border border-dashed border-gray-200">
-                   <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4"><ListIcon /></div>
-                   <h3 className="text-lg font-bold text-gray-800">Your shopping list is clear!</h3>
+                  <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4"><ListIcon /></div>
+                  <h3 className="text-lg font-bold text-gray-800">Your shopping list is clear!</h3>
                 </div>
               )}
             </div>
@@ -444,11 +448,11 @@ const App: React.FC = () => {
         {currentView === 'reports' && <ReportsDashboard expenses={expenses} categories={categories} budgets={budgets} translations={t} />}
 
         {currentView === 'settings' && (
-          <SettingsManager 
-            categories={categories} 
-            budgets={budgets} 
-            onAddCategory={async (n, c) => await supabase.from('categories').insert([{ name: n, color: c, user_id: session.user.id }])} 
-            onDeleteCategory={async (id) => await supabase.from('categories').delete().eq('id', id)} 
+          <SettingsManager
+            categories={categories}
+            budgets={budgets}
+            onAddCategory={async (n, c) => await supabase.from('categories').insert([{ name: n, color: c, user_id: session.user.id }])}
+            onDeleteCategory={async (id) => await supabase.from('categories').delete().eq('id', id)}
             onUpdateBudget={async (id, amt) => {
               const existing = budgets.find(b => b.category_id === id);
               if (existing) await supabase.from('budgets').update({ amount: amt }).eq('category_id', id);
@@ -458,7 +462,7 @@ const App: React.FC = () => {
         )}
 
         <footer className="mt-16 pb-8 text-center">
-            <p className="text-xs font-black text-gray-300 uppercase tracking-widest">{t.poweredBy}</p>
+          <p className="text-xs font-black text-gray-300 uppercase tracking-widest">{t.poweredBy}</p>
         </footer>
       </main>
 
